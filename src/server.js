@@ -254,6 +254,32 @@ server.put("/customers/:id", async (req, res) => {
   }
 });
 
+//ALUGUEL >>>>>>>>>>>>>>>>>>>>>>>>>>
+
+server.get("/rentals", async (req, res) => {
+  const { customerId, gameId } = req.query;
+  const rentalsArray = [];
+  let searchedRentals = "";
+
+  try {
+    if (customerId) {
+      rentalsArray.push(customerId);
+      searchedRentals += `WHERE customerId = $${rentalsArray.length}`;
+    }
+    if (gameId) {
+        rentalsArray.push(gameId);
+        searchedRentals += `WHERE gameId = $${rentalsArray.length}`;
+      }
+    const gamesList = await connection.query(
+      `SELECT * FROM rentals ${searchedRentals};`,
+      rentalsArray
+    );
+    res.send(gamesList.rows);
+  } catch (error) {
+    console.log(error.message);
+  }
+});
+
 server.listen(process.env.PORT, () => {
   console.log("listening in port " + process.env.PORT);
 });
