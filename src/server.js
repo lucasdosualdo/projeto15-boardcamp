@@ -1,4 +1,4 @@
-import express from "express";
+import express, { query } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { connection } from "./database.js";
@@ -266,12 +266,12 @@ server.get("/rentals", async (req, res) => {
     const gamesList = await connection.query(
       `
     SELECT rentals.*,
-    json_build_object('id', customers.id, 'name', customers.name) as customer,
-    json_build_object('id', games.id, 'name', games.name, 'categoryId', games.'categoryId', 'categoryName', categories.name) as game
+    json_build_object("id", customers.id, "name", customers.name) as customer,
+    json_build_object("id", games.id, "name", games.name, "categoryId", games."categoryId", "categoryName", categories.name) as game
     FROM rentals
-    JOIN customers ON rentals.'customerId'=customers.id
-    JOIN games ON rentals.'gameId'=games.id
-    JOIN categories ON games.'categoryId'=categories.id;
+    JOIN customers ON rentals."customerId"=customers.id
+    JOIN games ON rentals."gameId"=games.id
+    JOIN categories ON games."categoryId"=categories.id;
     `
     );
     res.send(gamesList.rows);
@@ -295,12 +295,38 @@ server.post("/rentals", async (req, res) => {
       res.status(404).send("Usuário ou jogo não existente.");
       return;
     }
+
     if (typeof daysRented !== "number" || daysRented <= 0) {
       res.status(404).send("Insira o número de dias corretamente.");
       return;
     }
 
-    res.send();
+    const game = validateGame.rows[0];
+
+    const availableGame = await connection.query(
+      `
+    SELECT * FROM rentals WHERE "gameId"=$1 AND "returnDate"=null;`,
+      [gameId]
+    );
+
+    if (availableGame.rowCount > 0) {
+      if (game.stockTotal === availableGame.rowCount) {
+        res.status(400).send("Todos os estoques deste jogo estão alugados.");
+        return;
+      }
+    }
+
+    const originalPrice = daysRented * game.pricePerDay;
+
+    const testEnvio = await connection.query(
+      `
+    INSERT INTO rental ('customerId', 'gameId', 'rentDate', 'daysRented', 'returnDate', 'originalPrice', 'delayFee')
+    VALUES ($1, $2, NOW(), $3, null, $4, null);
+    `,
+      [customerId, gameId, daysRented, originalPrice]
+    );
+
+    res.send(testEnvio.rows);
   } catch (error) {
     console.log(error.message);
   }
