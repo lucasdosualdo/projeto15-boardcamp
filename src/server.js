@@ -95,7 +95,10 @@ server.get("/games", async (req, res) => {
       searchedGames += `WHERE name ILIKE $${gamesArray.length}`;
     }
     const gamesList = await connection.query(
-      `SELECT * FROM games ${searchedGames};`,
+      `SELECT games.*, categories.name AS "categoryName" 
+      FROM games
+      JOIN categories ON games."categoryId"=categories.id
+      ${searchedGames};`,
       gamesArray
     );
     res.send(gamesList.rows);
@@ -258,23 +261,46 @@ server.put("/customers/:id", async (req, res) => {
 
 server.get("/rentals", async (req, res) => {
   const { customerId, gameId } = req.query;
-  const rentalsArray = [];
-  let searchedRentals = "";
 
   try {
-    if (customerId) {
-      rentalsArray.push(customerId);
-      searchedRentals += `WHERE customerId = $${rentalsArray.length}`;
-    }
-    if (gameId) {
-        rentalsArray.push(gameId);
-        searchedRentals += `WHERE gameId = $${rentalsArray.length}`;
-      }
     const gamesList = await connection.query(
-      `SELECT * FROM rentals ${searchedRentals};`,
-      rentalsArray
+      `
+    SELECT rentals.*,
+    json_build_object('id', customers.id, 'name', customers.name) as customer,
+    json_build_object('id', games.id, 'name', games.name, 'categoryId', games.'categoryId', 'categoryName', categories.name) as game
+    FROM rentals
+    JOIN customers ON rentals.'customerId'=customers.id
+    JOIN games ON rentals.'gameId'=games.id
+    JOIN categories ON games.'categoryId'=categories.id;
+    `
     );
     res.send(gamesList.rows);
+  } catch (error) {
+    console.log(error.message);
+  }
+});
+
+server.post("/rentals", async (req, res) => {
+  const { customerId, gameId, daysRented } = req.body;
+  try {
+    const validateCustomer = await connection.query(
+      "SELECT * FROM customers WHERE id = $1",
+      [customerId]
+    );
+    const validateGame = await connection.query(
+      "SELECT * FROM games WHERE id = $1",
+      [gameId]
+    );
+    if (validateCustomer.rowCount === 0 || validateGame.rowCount === 0) {
+      res.status(404).send("Usuário ou jogo não existente.");
+      return;
+    }
+    if (typeof daysRented !== "number" || daysRented <= 0) {
+      res.status(404).send("Insira o número de dias corretamente.");
+      return;
+    }
+
+    res.send();
   } catch (error) {
     console.log(error.message);
   }
