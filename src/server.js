@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { connection } from "./database.js";
 import joi from "joi";
+import dayjs from "dayjs";
 
 dotenv.config();
 const server = express();
@@ -23,6 +24,13 @@ const gamesShcema = joi.object({
   stockTotal: joi.number().greater(0).required(),
   categoryId: joi.number().required(),
   pricePerDay: joi.number().greater(0).required(),
+});
+
+const customersSchema = joi.object({
+  name: joi.string().required().trim(),
+  phone: joi.string().min(10).max(11).pattern(/^[0-9]+$/).required(),
+  cpf: joi.string().length(11).pattern(/^[0-9]+$/).required(),
+  birthday: joi.date().required(),
 });
 
 //CATEGORIES >>>>>>>>>>>>>>>>>>>>>>>>>>
@@ -115,11 +123,80 @@ server.post("/games", async (req, res) => {
       res.status(400).send("Categoria não existente.");
       return;
     }
-    const jogoadd = await connection.query(
+    await connection.query(
       `INSERT INTO games (name, image, "stockTotal", "categoryId", "pricePerDay") VALUES ($1, $2, $3, $4, $5);`,
       [name, image, stockTotal, categoryId, pricePerDay]
     );
-    res.status(201).send(jogoadd);
+    res.sendStatus(201);
+  } catch (error) {
+    console.log(error.message);
+  }
+});
+
+//CLIENTES >>>>>>>>>>>>>>>>>>>>>>>>>>
+
+server.get("/customers", async (req, res) => {
+  const { cpf } = req.query;
+  const customersArray = [];
+  let searchedCustomers = "";
+
+  try {
+    if (cpf) {
+      customersArray.push(`${cpf}%`);
+      searchedCustomers += `WHERE cpf ILIKE $${customersArray.length}`;
+    }
+    const gamesList = await connection.query(
+      `SELECT * FROM customers ${searchedCustomers};`,
+      customersArray
+    );
+    res.send(gamesList.rows);
+  } catch (error) {
+    console.log(error.message);
+  }
+});
+
+server.get("/customers/:id", async (req, res) => {
+  const id = req.params.id;
+  try {
+    const customer = await connection.query(
+      "SELECT * FROM customers WHERE id = $1",
+      [id]
+    );
+    if (customer.rowCount === 0) {
+      res.status(404).send("Usuário não existente.");
+      return;
+    }
+    res.send(customer.rows[0]);
+  } catch (error) {
+    console.log(error.message);
+  }
+});
+
+server.post("/customers", async (req, res) => {
+  const { name, phone, cpf, birthday } = req.body;
+  const validation = customersSchema.validate(req.body, {
+    abortEarly: false,
+  });
+  if (validation.error) {
+    const err = validation.error.details.map((err) => err.message);
+    res.status(400).send(err);
+    return;
+  }
+
+  try {
+    const existingCpf = await connection.query(
+      "SELECT * FROM customers WHERE cpf = $1;",
+      [cpf]
+    );
+    if (existingCpf.rowCount > 0) {
+      res.status(409).send("CPF já existente.");
+      return;
+    }
+    const customerteste = await connection.query(
+      `INSERT INTO customers (name, phone, cpf, birthday) VALUES ($1, $2, $3, $4);`,
+      [name, phone, cpf, birthday]
+    );
+    res.send(customerteste.rows);
   } catch (error) {
     console.log(error.message);
   }
