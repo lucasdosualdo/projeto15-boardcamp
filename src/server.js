@@ -28,8 +28,17 @@ const gamesShcema = joi.object({
 
 const customersSchema = joi.object({
   name: joi.string().required().trim(),
-  phone: joi.string().min(10).max(11).pattern(/^[0-9]+$/).required(),
-  cpf: joi.string().length(11).pattern(/^[0-9]+$/).required(),
+  phone: joi
+    .string()
+    .min(10)
+    .max(11)
+    .pattern(/^[0-9]+$/)
+    .required(),
+  cpf: joi
+    .string()
+    .length(11)
+    .pattern(/^[0-9]+$/)
+    .required(),
   birthday: joi.date().required(),
 });
 
@@ -192,9 +201,52 @@ server.post("/customers", async (req, res) => {
       res.status(409).send("CPF já existente.");
       return;
     }
-    const customerteste = await connection.query(
+    await connection.query(
       `INSERT INTO customers (name, phone, cpf, birthday) VALUES ($1, $2, $3, $4);`,
       [name, phone, cpf, birthday]
+    );
+    res.sendStatus(201);
+  } catch (error) {
+    console.log(error.message);
+  }
+});
+
+server.put("/customers/:id", async (req, res) => {
+  const { name, phone, cpf, birthday } = req.body;
+  const id = req.params.id;
+  const validation = customersSchema.validate(req.body, {
+    abortEarly: false,
+  });
+  if (validation.error) {
+    const err = validation.error.details.map((err) => err.message);
+    res.status(400).send(err);
+    return;
+  }
+
+  try {
+    const searchedCustomer = await connection.query(
+      "SELECT * FROM customers WHERE id = $1;",
+      [id]
+    );
+    if (searchedCustomer.rowCount === 0) {
+      res.status(404).send("Usuário não existente.");
+      return;
+    }
+    const existingCpf = await connection.query(
+      "SELECT * FROM customers WHERE cpf = $1 AND id <> $2;",
+      [cpf, id]
+    );
+    if (existingCpf.rowCount > 0) {
+      res.status(409).send("CPF já existente.");
+      return;
+    }
+    const customerteste = await connection.query(
+      `UPDATE customers SET 
+      name = $1,
+      phone = $2,
+      cpf = $3,
+      birthday = $4 WHERE id = $5;`,
+      [name, phone, cpf, birthday, id]
     );
     res.send(customerteste.rows);
   } catch (error) {
